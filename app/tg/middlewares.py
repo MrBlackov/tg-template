@@ -1,0 +1,137 @@
+import uuid
+from typing import Callable, Dict, Any, Awaitable
+from aiogram import BaseMiddleware
+from aiogram.types import Message, CallbackQuery, TelegramObject, User
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+from datetime import datetime
+
+from config import settings, dp
+from app.logging.base import botlog
+from app.tg.text.utils import TextHTML
+from app.tg.callback.base import BaseCall
+from app.exception.base import BotError, PythonError, ALienCallbackError
+from app.db.methods import check_user
+
+class BotLogMessageMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[Message, Dict[str, Any]], Awaitable[Any]],
+        event: Message,
+        data: Dict[str, Any]
+    ) -> Any:
+        request_id = uuid.uuid4().hex
+        with botlog.logger.contextualize(tg_id=event.from_user.id, chat_id=event.chat.id, request_id=request_id):
+            botlog.message(event.text)
+            with botlog.logger.catch(reraise=True):
+                data['request_id'] = request_id
+                result = await handler(event, data)
+                return result
+            
+class BotLogCallbackQueryMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[Message, Dict[str, Any]], Awaitable[Any]],
+        event: CallbackQuery,
+        data: Dict[str, Any]
+    ) -> Any:
+        event = event
+        request_id = uuid.uuid4().hex
+        is_delay = False
+        with botlog.logger.contextualize(tg_id=event.from_user.id, chat_id=event.message.chat.id, request_id=request_id):
+            if not is_delay:
+                botlog.callback(event.data)
+            with botlog.logger.catch(reraise=True):
+                start = datetime.now()
+                data['request_id'] = request_id
+                result = await handler(event, data)
+                end = datetime.now()
+                if is_delay:
+                    result = f'{int((end - start).total_seconds()*1000)}'
+                return result
+
+
+
+class ExceptionMessageMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[Message, Dict[str, Any]], Awaitable[Any]],
+        event: Message,
+        data: Dict[str, Any]
+    ) -> Any:            
+        dowload = await event.answer('⏳')
+        try:
+            result = await handler(event, data)
+            try:
+                await event.delete()
+            except:
+                pass
+            return result
+        except BotError as bote:
+            botlog.logger.trace(f'AioPartPath: {bote}', tg_id=event.from_user.id, chat_id=event.chat.id)
+            await event.answer((TextHTML(bote.to_msg).escape())[:4000])
+        except (TelegramBadRequest, TelegramForbiddenError) as e:
+            botlog.logger.warning(f'AioPartPath: {e}', tg_id=event.from_user.id, chat_id=event.chat.id)
+        except Exception as e:
+            str_e = str(e)
+            botlog.logger.error(f'AioPartPath: {e}', tg_id=event.from_user.id, chat_id=event.chat.id)
+            if event.from_user.id == settings.owner:
+                await event.answer(f'{PythonError.msg}: {(TextHTML(str_e).escape())[:4000]}')
+            else:
+                await event.answer(f'{PythonError.msg}')
+            raise e
+        finally:
+            await dowload.delete()
+        
+class ExceptionCallbackQueryMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[Message, Dict[str, Any]], Awaitable[Any]],
+        event: CallbackQuery,
+        data: Dict[str, Any]
+    ) -> Any:
+            callback_data: BaseCall = data.get('callback_data', BaseCall(tg_id=0, is_check=True))
+            check_is_user = True
+            try:
+                if check_is_user and callback_data.is_check:
+                    if event.from_user.id != callback_data.tg_id:
+                        raise ALienCallbackError(f'This user enter is alien event keyboard', tg_id=event.from_user.id, chat_id=event.message.chat.id)
+                answer_text = ''
+                show_alert = None
+                result = await handler(event, data)
+                return result, event
+            except BotError as bote:
+                botlog.logger.trace(f'AioPartPath: {bote}', tg_id=event.from_user.id, chat_id=event.message.chat.id)
+                show_alert = True
+                answer_text = (TextHTML(bote.to_msg).escape())[:4000]
+            except (TelegramBadRequest, TelegramForbiddenError) as e:
+                botlog.logger.warning(f'AioPartPath: {e}', tg_id=event.from_user.id, chat_id=event.message.chat.id)
+            except Exception as e:
+                str_e = str(e)
+                botlog.logger.error(f'AioPartPath: {e}', tg_id=event.from_user.id, chat_id=event.message.chat.id)
+                show_alert = True
+                if event.from_user.id == settings.owner:
+                    answer_text = f'{PythonError.msg}: {(TextHTML(str_e).escape())[:4000]}'
+                else:
+                    answer_text = f'{PythonError.msg}'
+                raise e
+            finally:
+                try:
+                    await event.answer(answer_text, show_alert=show_alert)
+                except Exception as e:
+                    botlog.logger.error(f'AioPartPath: {e}', tg_id=event.from_user.id, chat_id=event.message.chat.id)
+                    if event.from_user.id == settings.owner:
+                        await event.message.answer(f'⚠️ {(TextHTML(e).escape())[:4000]} \n \n {answer_text}')
+                    else:
+                        await event.answer(f'{PythonError.msg}', show_alert=True)
+
+
+class UserMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any],
+    ) -> Any:
+        user: User = data.get('event_from_user')
+        await check_user(tg_id=user.id, username=user.username, fullname=user.full_name)
+        return await handler(event, data)

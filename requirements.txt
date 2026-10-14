@@ -1,0 +1,9 @@
+aiogram==3.31.0
+loguru==0.7.3
+Markdown==3.11
+pydantic==2.13.5
+python-dotenv==1.2.4
+redis==8.1.0
+alembic==1.17.0
+sqlalchemy[asyncio]==2.0.44
+asyncpg==0.30.0

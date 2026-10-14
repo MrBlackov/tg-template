@@ -1,0 +1,75 @@
+from aiogram.fsm.context import FSMContext
+
+class FSMUtils:
+    prefixs: list[str] = []
+    
+    def __init__(self, state: FSMContext | None):
+        self._state = state
+
+    @property
+    def state(self):
+        return self._state
+ 
+    def add_prefix(self, *new_prefix: str):
+        return FSMUtils(self._state, (self.prefix + '_'.join(new_prefix)).removeprefix('_').removesuffix('_'))
+
+    @property
+    def prefix(self):
+        return '_'.join(self.prefixs + [self.prefix_two])
+    
+    async def get_value(self, key: str, default = None):
+        return await self._state.get_value(self.prefix + key, default)
+    
+    async def update_data(self, **kwargs):
+        state_keys = await self.get_value('state_keys', [])
+        return await self._state.update_data(**{self.prefix + k: v for k, v in kwargs.items()} | {self.prefix + 'state_keys': state_keys + [self.prefix + k for k in kwargs.keys() if self.prefix + k not in state_keys]})
+    
+    async def set_state(self, new_state = None):
+        return await self._state.set_state(new_state)
+ 
+    async def get_state(self):
+        return await self._state.get_state()
+
+    async def get_data(self):
+        data = await self._state.get_data()
+        return {k.replace(self.prefix, ''):v for k,v in data.items()}
+
+    async def clear(self):
+        return await self._state.clear()
+    
+    async def clear_this_state(self):
+        data = await self._state.get_data()
+        new_data = {k:v for k, v in data.items() if k not in data.get(self.prefix + 'state_keys', [])}
+        return await self._state.set_data(new_data)
+
+    async def set_data(self, data: dict):
+        return await self._state.set_data({self.prefix + k: v for k, v in data.items() if not v is None})
+
+    async def remove_value(self, key: str):
+        data = await self.get_data()
+        state_keys = data.get('state_keys', [])
+        data['state_keys'] = [k for k in state_keys if key not in k]
+        return await self.set_data({k: v for k, v in data.items() if key != k})
+
+    async def save_message(self, chat_id: int, message_id: int):
+        return await self.update_data(chat_id=chat_id, message_id=message_id)
+    
+    async def get_message(self) -> tuple[int, int]:
+        return await self.get_value('chat_id'), await self.get_value('message_id')
+    
+    async def remove_message(self):
+        await self.remove_value('chat_id')
+        await self.remove_value('message_id')
+
+    async def pop_value(self, key: str, default = None):
+        data = await self._state.get_data()
+        if self.prefix + key:
+            value = data.pop(self.prefix + key, default)
+        else:
+            value = default
+        await self._state.set_data(data)
+        return value
+
+class MainFSM(FSMUtils):
+    prefixs = ['main']
+

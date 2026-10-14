@@ -1,0 +1,106 @@
+import loguru, sys
+from typing import Literal
+
+from app.logging.paths import PurePath, LogPaths
+
+class BotLog:
+    def __init__(self, terminal_level: Literal['trace', 'debug', 'info', 'success', 'warning', 'error', 'critical'] = 'debug'):
+        self.terminal_level = terminal_level.upper()
+        self.loguru = loguru
+        self.logger = self.loguru.logger
+        self.log_format = """{level.icon}  | <green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | <cyan>{message}</cyan> | <blue>[{extra}]</blue>"""
+        self.levels = self.create_levels()
+        self.sinks = self.handlers()
+        self.create_handlers()
+
+    def handlers(self):
+        return [
+            {
+            'sink':sys.stderr,
+            'level':self.terminal_level,
+            'format':self.log_format,
+            'enqueue':True,
+            }
+        ] + [
+            {
+            "sink":LogPaths.base / PurePath(f'{self.levels[0].name.lower()}' + '_{time:YYYY-MM-DD}.log'),
+            'rotation':'7 day',
+            'retention':'30 days',
+            'filter':lambda r: r['level'].name == self.levels[0].name,
+            'level':self.levels[0].name, 
+            'enqueue':True,
+            'format':self.log_format,
+            'catch':True,
+            'serialize':True
+            }, 
+            {
+            "sink":LogPaths.base / PurePath(f'{self.levels[1].name.lower()}' + '_{time:YYYY-MM-DD}.log'),
+            'rotation':'7 day',
+            'retention':'30 days',
+            'filter':lambda r: r['level'].name == self.levels[1].name,
+            'level':self.levels[1].name, 
+            'enqueue':True,
+            'format':self.log_format,
+            'catch':True,
+            'serialize':True
+            }, 
+            {
+            "sink":LogPaths.base / PurePath('bot_{time:YYYY-MM-DD}.log'),
+            'rotation':'7 day',
+            'retention':'30 days',
+            'level':'DEBUG', 
+            'enqueue':True,
+            'format':self.log_format,
+            'catch':True,
+            'serialize':True
+            }, 
+            {
+            "sink":LogPaths.base / PurePath(f'warning.log'),
+            'rotation':'30 day',
+            'retention':'120 days',
+            'level':'WARNING', 
+            'enqueue':True,
+            'format':self.log_format,
+            'catch':True,
+            'serialize':True
+            }, 
+            {
+            "sink":LogPaths.base / PurePath(f'error.log'),
+            'level':'ERROR', 
+            'enqueue':True,
+            'format':self.log_format,
+            'catch':True,
+            'serialize':True
+            }, 
+        ]
+    
+    def create_handlers(self):
+        self.logger.remove()
+        id_handlers = []
+        for handler in self.sinks:
+            l = self.logger.add(**handler)
+            id_handlers.append(l)
+        return self
+
+    def create_levels(self):
+        return [
+            self.logger.level("MESSAGE", no=15, color="<blue>", icon="💬"),
+            self.logger.level("CALLBACK", no=14, color="<blue>", icon="🌐"),
+            self.logger.level("BOT START", no=25, color="<white>", icon="🏁"),
+            self.logger.level("BOT STOP", no=26, color="<white>", icon="🛑"),
+        ]
+
+    def message(self, msg: str, **kwargs):
+        self.logger.log('MESSAGE', f'Text: {msg}', **kwargs)
+
+    def callback(self, callback_data: str, **kwargs):
+        prefix, data = callback_data.split(':', maxsplit=1)
+        self.logger.log('CALLBACK', f'Prefix: {prefix}, Data: {data}', **kwargs)
+        
+    def start(self, **kwargs):
+        self.logger.log('BOT START', f'Бот запущен', **kwargs)
+
+    def stop(self, **kwargs):
+        self.logger.log('BOT STOP', f'Бот останавливается', **kwargs)
+
+botlog = BotLog()
