@@ -5,7 +5,7 @@ from aiogram.types import Message, CallbackQuery, User, Update
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from datetime import datetime
 
-from config import settings, dp
+from config import settings
 from app.logging.base import botlog
 from app.tg.text.utils import TextHTML
 from app.tg.callback.base import BaseCall
@@ -65,7 +65,7 @@ class ExceptionMessageMiddleware(BaseMiddleware):
             result = await handler(event, data)
             try:
                 await event.delete()
-            except:
+            except Exception:
                 pass
             return result
         except BotError as bote:

@@ -15,5 +15,4 @@ async def check_user(session: AsyncSession, tg_id: int, username: str | None, fu
         else: 
             user = await dao.user.add({'tg_id':tg_id})
             user.tg_user = TgUserDB(tg_id=tg_id, username=username, fullname=fullname)
-        await session.commit()
         return user

@@ -1,6 +1,6 @@
 from aiogram import Router
 from aiogram.types import Message, CallbackQuery
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandStart
 from telegram_click_aio.decorator import command
 
 from app.service.main import MainService
@@ -12,6 +12,11 @@ main_router = Router()
 
 main_router.message.middleware(ServiceMiddleware(MainService))
 main_router.callback_query.middleware(ServiceMiddleware(MainService))
+
+@main_router.message(CommandStart(deep_link=False))
+@command(name='start', description='')
+async def cmd(message: Message, service: MainService, **kwargs):
+    await service.start()
 
 @main_router.message(Command('redactstate'))
 @command(name='redactstate', arguments=[Requireds.key, Requireds.value], description='')

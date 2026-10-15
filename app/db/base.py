@@ -9,7 +9,6 @@ DATABASE_URL = settings.db_url
 
 engine = create_async_engine(url=DATABASE_URL)
 async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
-session = async_session_maker()
 
 class Base(AsyncAttrs, DeclarativeBase):
     __abstract__ = True

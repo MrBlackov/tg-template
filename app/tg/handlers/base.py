@@ -4,7 +4,7 @@ from aiogram.types import Message, InputRichMessage, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 
-from config import settings, bot
+from config import settings, bot, dp
 from app.tg.handlers.main import main_router
 from app.tg.handlers.help import help_router
 from app.tg.text.utils import TextHTML
@@ -49,7 +49,5 @@ async def call(callback: CallbackQuery, callback_data: CancelCall, state: FSMCon
 async def cmd(message: Message):
     if message.from_user.id != settings.owner:
         return
-    
     await message.answer("🛑 Бот останавливается...")
-    await bot.session.close()        
-    asyncio.get_running_loop().stop()
+    await dp.stop_polling()

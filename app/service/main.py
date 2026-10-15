@@ -8,6 +8,14 @@ class MainService(BaseService):
     text = MainText
     IKB = MainIKB
 
+    async def start(self):
+        return await self.answer([
+            AnswerBody(
+                text=self.text.start(),
+                reply_markup=self.IKB.help()
+            )
+            ]) 
+
     async def add_state(self, key: str, value: str):
         data = await self.fsm.state.update_data(**{key:value})
         return await self.answer([

@@ -2,6 +2,10 @@ from app.tg.text.base import BaseText
 
 class MainText(BaseText):
     @classmethod
+    def start(self):
+        return '👋 Привет'
+
+    @classmethod
     def state_clear(self):
         return f'✅ Куки очищены'
 

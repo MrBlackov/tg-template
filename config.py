@@ -1,4 +1,4 @@
-import os, redis.asyncio as redis
+import os, redis.asyncio as redis, asyncio
 from dotenv import load_dotenv
 from pathlib import Path
 from aiogram import Bot, Dispatcher
@@ -10,8 +10,11 @@ from aiogram.types import (BotCommand,
                            BotCommandScopeChat, 
                            BotCommandScopeAllPrivateChats, 
                            BotCommandScopeAllGroupChats, 
-                           BotCommandScopeAllChatAdministrators)
+                           BotCommandScopeAllChatAdministrators,
+                           User)
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.client.session.aiohttp import AiohttpSession
+from app.logging.base import botlog
 
 load_dotenv(Path(__file__).parent / '.env')
 
@@ -41,6 +44,8 @@ class Settings:
     database_url = os.getenv('database_url')  
     db_drivers = os.getenv('db_drivers', 'postgresql+asyncpg://')  
 
+    info: dict = {}
+
     @property
     def is_dev(self):
         return True if self._is_dev in ['t', 'true', '1'] else False
@@ -60,6 +65,10 @@ class Settings:
     @property
     def db_url(self):
         return f"{self.db_drivers}{self.database_url}" or f"{self.db_drivers}{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+
+    @property
+    def bot(self) -> User:
+        return self.info.get('main')
     
 settings = Settings()
 
@@ -96,3 +105,13 @@ async def to_menu_cmds():
     await bot.set_my_commands(user_menu, scope=BotCommandScopeAllGroupChats())
     await bot.set_my_commands(user_menu, scope=BotCommandScopeAllPrivateChats())
     await bot.set_my_commands(user_menu, scope=BotCommandScopeAllChatAdministrators())
+
+async def update_bot_info():
+    try:
+        bot_info = await bot.get_me()
+        settings.info['main'] = bot_info
+        return bot_info
+    except TelegramBadRequest: 
+        botlog.logger.critical('Телеграм недоступен')
+        await bot.session.close()        
+        asyncio.get_running_loop().stop()
