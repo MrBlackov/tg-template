@@ -2,14 +2,16 @@ import asyncio, functools
 from typing import TypeVar
 from datetime import datetime
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, InputRichMessage
+from aiogram.types import Message, CallbackQuery, InputRichMessage, User, Chat
 from aiogram.filters import CommandStart, Command, CommandObject
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings, bot
 from app.logging.base import botlog
 from app.tg.buttons.base import BotIKB
 from app.tg.fsm.utils import FSMUtils
 from app.validate.tg import Answer, AnswerBody
+from app.logic.base import BaseLogic
 
 NOT_NEW_STATE = object()
 DATA_PAGE = TypeVar('DATA_PAGE')
@@ -19,31 +21,35 @@ class BaseService:
     datetime = datetime
     botlog = botlog
 
+    logic = BaseLogic
+    fsm = FSMUtils
+    IKB = BotIKB
+    text = None
+
     def __init__(self, 
+                 user: User, 
+                 chat: Chat, 
                  message: Message, 
                  state: FSMContext | None = None, 
                  callback: CallbackQuery | None = None, 
-                 command: CommandObject | None = None, 
+                 session: AsyncSession | None = None,
                  **kwargs):
         self.settings = settings
         self.bot = bot
-        self.message = message
         self.callback = callback
-        self.command = command
+        self.message = message or self.callback.message
         self.kwargs = kwargs
 
-        self.user = self.callback.from_user if self.callback else self.message.from_user
-        self.chat = self.callback.message.chat if self.callback else self.message.chat
+        self.user = user
+        self.chat = chat
         self.tg_id = self.user.id
 
         self.is_bot_message = bool(self.callback)
-        self.enter_args: bool = self.command.args != None if command else False
         self.to_edit_message: bool = self.kwargs.get('to_edit_message', bool(self.callback))
 
-        self.fsm: FSMUtils = FSMUtils(state)
-        self.IKB = BotIKB(self.tg_id)
-        self.text = None
-        self.logic = None
+        self.fsm = self.fsm(state)
+        self.IKB = self.IKB(self.tg_id)
+        self.logic = self.logic(self.tg_id, session=session)
 
     @property
     def purpose(self):

@@ -4,11 +4,19 @@ from app.tg.text.main import MainText
 from app.tg.buttons.main import MainIKB
 
 class MainService(BaseService):
-    def __init__(self, message = None, state = None, callback = None, **kwargs):
-        super().__init__(message, state, callback, **kwargs)
-        self.logic = MainLogic(tg_id=self.tg_id)
-        self.text = MainText
-        self.IKB = MainIKB(tg_id=self.tg_id)
+    logic = MainLogic
+    text = MainText
+    IKB = MainIKB
+
+    async def add_state(self, key: str, value: str):
+        data = await self.fsm.state.update_data(**{key:value})
+        return await self.answer([
+            AnswerBody(
+                text=self.text.state(data),
+                reply_markup=self.IKB.my_state(),
+                is_rich_text=True
+            )
+            ])
     
     async def my_state(self):
         data = await self.fsm.state.get_data()

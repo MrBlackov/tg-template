@@ -1,6 +1,6 @@
 import asyncio
 
-from config import dp, bot, to_menu_cmds
+from config import dp, bot, to_menu_cmds, settings
 from app.tg.handlers.base import base_router
 from app.tg.middlewares import (BotLogMessageMiddleware, 
                                 BotLogCallbackQueryMiddleware, 
@@ -24,7 +24,8 @@ async def main():
 
 @dp.shutdown()
 async def stop(bot):
-    await dp.storage.close()
+    if settings.use_redis:
+        await dp.storage.close()
     botlog.stop()
 
 if __name__ == "__main__": 
